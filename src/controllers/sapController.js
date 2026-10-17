@@ -628,6 +628,79 @@ const getMaterialList = async (req, res) => {
     }
 };
 
+/**
+ * Controller to handle Production Order Create and Release.
+ */
+const productionOrderCreateRelease = async (req, res) => {
+    try {
+        const payload = req.body || {};
+        const data = await sapODataService.productionOrderCreateRelease(payload);
+
+        res.status(200).json({
+            Message: 'Production Order created and released successfully',
+            StatusCode: 200,
+            Data: data
+        });
+    } catch (error) {
+        console.error('Error in productionOrderCreateRelease controller:', error.message);
+        const statusCode = error.statusCode || 500;
+        res.status(statusCode).json({
+            Message: error.message || 'Failed to create and release Production Order',
+            StatusCode: statusCode,
+            Data: []
+        });
+    }
+};
+
+/**
+ * Controller to handle Production Order Quantity Change (PATCH).
+ */
+const productionOrderQtyChange = async (req, res) => {
+    try {
+        const payload = {
+            ...(req.query || {}),
+            ...(req.params || {}),
+            ...(req.body || {})
+        };
+
+        // Extract order number dynamically from any common field name
+        const dynamicOrder = 
+            payload.ManufacturingOrder || 
+            payload.manufacturingOrder || 
+            payload.orderNumber || 
+            payload.OrderNumber || 
+            payload.orderNo || 
+            payload.OrderNo || 
+            payload.orderId || 
+            payload.OrderId || 
+            payload.order || 
+            payload.Order || 
+            payload.aufnr || 
+            payload.AUFNR;
+
+        if (dynamicOrder) {
+            payload.ManufacturingOrder = String(dynamicOrder).trim();
+        }
+
+        const data = await sapODataService.productionOrderQtyChange(payload);
+
+        res.status(200).json({
+            Message: 'Production Order quantity updated successfully',
+            StatusCode: 200,
+            Data: data
+        });
+    } catch (error) {
+        console.error('Error in productionOrderQtyChange controller:', error.message);
+        const statusCode = error.statusCode || 500;
+        res.status(statusCode).json({
+            Message: error.message || 'Failed to update Production Order quantity',
+            StatusCode: statusCode,
+            Data: []
+        });
+    }
+};
+
+
 module.exports = {
     getSAPData,
     postSAPData,
@@ -650,6 +723,10 @@ module.exports = {
     productionOrderConfirmationCancel,
     postPrdOrderConfirmation,
     getProductionOrderDetails,
-    getMaterialList
+    getMaterialList,
+    productionOrderCreateRelease,
+    productionOrderQtyChange
 };
+
+
 

@@ -80,5 +80,17 @@ router.post('/prodordergetdetails', sapController.getProductionOrderDetails);
 router.get('/get-material-list', sapController.getMaterialList);
 router.post('/get-material-list', sapController.getMaterialList);
 
+// POST & GET routes for Production Order Create and Release
+router.post('/production-order-create-release', sapController.productionOrderCreateRelease);
+router.get('/production-order-create-release', sapController.productionOrderCreateRelease);
+
+// PATCH & POST routes for Production Order Quantity Change
+router.patch('/production-order-qty-change', sapController.productionOrderQtyChange);
+router.post('/production-order-qty-change', sapController.productionOrderQtyChange);
+router.patch('/production-order-qty-change/:orderNumber', sapController.productionOrderQtyChange);
+router.post('/production-order-qty-change/:orderNumber', sapController.productionOrderQtyChange);
+
 module.exports = router;
+
+
 

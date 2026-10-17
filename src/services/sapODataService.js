@@ -938,6 +938,234 @@ const getMaterialDocInspLot = async (mblnr, gjahr) => {
     }
 };
 
+/**
+ * Fetch CSRF token for Production Order Service (API_PRODUCTION_ORDER_2_SRV).
+ */
+const fetchProductionOrderCsrfToken = async () => {
+    try {
+        const url = `${getSapBaseUrl()}/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV?sap-client=110`;
+        const response = await axios.get(url, {
+            auth: getSapAuth(),
+            headers: {
+                'X-CSRF-Token': 'Fetch',
+                'Accept': 'application/json'
+            }
+        });
+
+        const token = response.headers['x-csrf-token'];
+        const cookies = response.headers['set-cookie'];
+        return { token, cookies };
+    } catch (error) {
+        console.error('Failed to fetch Production Order CSRF token:', error.response ? error.response.data : error.message);
+        throw new Error('Could not retrieve CSRF token for Production Order API');
+    }
+};
+
+/**
+ * Service to Create a Production Order and Release it.
+ * Flow:
+ * 1. GET CSRF token and session cookies from API_PRODUCTION_ORDER_2_SRV?sap-client=110
+ * 2. POST to A_ProductionOrder_2?sap-client=110 with payload
+ * 3. Extract ManufacturingOrder from response
+ * 4. Wait 1 second (1000ms)
+ * 5. GET A_ProductionOrder_2('{ManufacturingOrder}')?sap-client=110 to get ETag and CSRF token
+ * 6. POST ReleaseOrder?ManufacturingOrder='{ManufacturingOrder}'&sap-client=110 with ETag & token
+ * 7. Return the response
+ */
+const productionOrderCreateRelease = async (payload = {}) => {
+    try {
+        // Step 1: Fetch CSRF token and cookies
+        const { token: csrfToken, cookies: initialCookies } = await fetchProductionOrderCsrfToken();
+        if (!csrfToken) {
+            throw new Error('No CSRF token returned from SAP for Production Order API');
+        }
+
+        let currentCookies = initialCookies || [];
+
+        // Step 2: Post payload to create production order
+        const createPayload = {
+            ManufacturingOrderType: payload.ManufacturingOrderType || 'ZSFG',
+            Material: payload.Material || 'COLFIBSMFG652DBL',
+            ProductionPlant: payload.ProductionPlant || '1200',
+            TotalQuantity: payload.TotalQuantity !== undefined ? String(payload.TotalQuantity) : '100',
+            ProductionUnit: payload.ProductionUnit || 'KM',
+            BasicSchedulingType: payload.BasicSchedulingType || '4',
+            ...payload
+        };
+
+        const createUrl = `${getSapBaseUrl()}/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/A_ProductionOrder_2?sap-client=110`;
+        const createResponse = await axios.post(createUrl, createPayload, {
+            auth: getSapAuth(),
+            headers: {
+                'X-CSRF-Token': csrfToken,
+                'Cookie': currentCookies.length > 0 ? (Array.isArray(currentCookies) ? currentCookies.join('; ') : currentCookies) : '',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        });
+
+        if (createResponse.headers['set-cookie']) {
+            currentCookies = createResponse.headers['set-cookie'];
+        }
+
+        const createdOrderData = createResponse.data?.d || createResponse.data;
+        const manufacturingOrder = createdOrderData?.ManufacturingOrder;
+
+        if (!manufacturingOrder) {
+            throw new Error('ManufacturingOrder was not found in SAP creation response');
+        }
+
+        console.log(`Created Manufacturing Order: ${manufacturingOrder}. Waiting 1 second before releasing...`);
+
+        // Step 3: Wait 1 second
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Step 4: GET production order details to fetch ETag and Token
+        const getOrderUrl = `${getSapBaseUrl()}/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/A_ProductionOrder_2('${manufacturingOrder}')?sap-client=110`;
+        const getOrderResponse = await axios.get(getOrderUrl, {
+            auth: getSapAuth(),
+            headers: {
+                'X-CSRF-Token': 'Fetch',
+                'Cookie': currentCookies.length > 0 ? (Array.isArray(currentCookies) ? currentCookies.join('; ') : currentCookies) : '',
+                'Accept': 'application/json'
+            }
+        });
+
+        const etag = getOrderResponse.headers['etag'] || getOrderResponse.data?.d?.__metadata?.etag;
+        const releaseToken = getOrderResponse.headers['x-csrf-token'] || csrfToken;
+        if (getOrderResponse.headers['set-cookie']) {
+            currentCookies = getOrderResponse.headers['set-cookie'];
+        }
+
+        // Step 5: Post to ReleaseOrder FunctionImport
+        const releaseUrl = `${getSapBaseUrl()}/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/ReleaseOrder?ManufacturingOrder='${manufacturingOrder}'&sap-client=110`;
+        const releaseHeaders = {
+            'X-CSRF-Token': releaseToken,
+            'Cookie': currentCookies.length > 0 ? (Array.isArray(currentCookies) ? currentCookies.join('; ') : currentCookies) : '',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        };
+        if (etag) {
+            releaseHeaders['If-Match'] = etag;
+        }
+
+        const releaseResponse = await axios.post(releaseUrl, {}, {
+            auth: getSapAuth(),
+            headers: releaseHeaders
+        });
+
+        const releaseData = releaseResponse.data?.d || releaseResponse.data;
+        return {
+            ManufacturingOrder: manufacturingOrder,
+            ...releaseData
+        };
+    } catch (error) {
+        console.error('Production Order Create and Release failed:', error.response ? error.response.data : error.message);
+        const errMsg = error.response ? JSON.stringify(error.response.data) : error.message;
+        const err = new Error(errMsg);
+        err.statusCode = error.statusCode || (error.response ? error.response.status : 500);
+        throw err;
+    }
+};
+
+/**
+ * Service to change Production Order Quantity via PATCH.
+ * Flow:
+ * 1. GET CSRF token and cookies from API_PRODUCTION_ORDER_2_SRV/?sap-client=110
+ * 2. GET A_ProductionOrder_2('{ManufacturingOrder}')?sap-client=110 to get ETag and CSRF token
+ * 3. PATCH A_ProductionOrder_2('{ManufacturingOrder}')?sap-client=110 with TotalQuantity and If-Match: etag
+ * 4. Return result
+ */
+const productionOrderQtyChange = async (params = {}) => {
+    try {
+        const dynamicOrder = 
+            params.ManufacturingOrder || 
+            params.manufacturingOrder || 
+            params.orderNumber || 
+            params.OrderNumber || 
+            params.orderNo || 
+            params.OrderNo || 
+            params.orderId || 
+            params.OrderId || 
+            params.order || 
+            params.Order || 
+            params.aufnr || 
+            params.AUFNR || 
+            '001210000181';
+
+        const manufacturingOrder = String(dynamicOrder).trim();
+        const totalQuantity = params.TotalQuantity !== undefined ? String(params.TotalQuantity) : '150.000';
+
+
+        // Step 1: Fetch CSRF token and session cookies
+        const { token: csrfToken, cookies: initialCookies } = await fetchProductionOrderCsrfToken();
+        if (!csrfToken) {
+            throw new Error('No CSRF token returned from SAP for Production Order API');
+        }
+
+        let currentCookies = initialCookies || [];
+
+        // Step 2: GET order to retrieve ETag and token
+        const getOrderUrl = `${getSapBaseUrl()}/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/A_ProductionOrder_2('${manufacturingOrder}')?sap-client=110`;
+        const getOrderResponse = await axios.get(getOrderUrl, {
+            auth: getSapAuth(),
+            headers: {
+                'X-CSRF-Token': 'Fetch',
+                'Cookie': currentCookies.length > 0 ? (Array.isArray(currentCookies) ? currentCookies.join('; ') : currentCookies) : '',
+                'Accept': 'application/json'
+            }
+        });
+
+        const etag = getOrderResponse.headers['etag'] || getOrderResponse.data?.d?.__metadata?.etag;
+        const patchToken = getOrderResponse.headers['x-csrf-token'] || csrfToken;
+        if (getOrderResponse.headers['set-cookie']) {
+            currentCookies = getOrderResponse.headers['set-cookie'];
+        }
+
+        const currentQty = getOrderResponse.data?.d?.TotalQuantity;
+
+        // Step 3: PATCH TotalQuantity
+        const patchUrl = `${getSapBaseUrl()}/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/A_ProductionOrder_2('${manufacturingOrder}')?sap-client=110`;
+        const patchPayload = {
+            TotalQuantity: totalQuantity
+        };
+
+        const patchHeaders = {
+            'X-CSRF-Token': patchToken,
+            'Cookie': currentCookies.length > 0 ? (Array.isArray(currentCookies) ? currentCookies.join('; ') : currentCookies) : '',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        };
+        if (etag) {
+            patchHeaders['If-Match'] = etag;
+        }
+
+        const patchResponse = await axios.patch(patchUrl, patchPayload, {
+            auth: getSapAuth(),
+            headers: patchHeaders
+        });
+
+        return {
+            ManufacturingOrder: manufacturingOrder,
+            PreviousQuantity: currentQty,
+            TotalQuantity: totalQuantity,
+            StatusCode: patchResponse.status,
+            Status: 'Success'
+        };
+    } catch (error) {
+        console.error('Production Order Qty Change failed:', error.response ? error.response.data : error.message);
+        let errMsg = error.message;
+        if (error.response?.data?.error?.message?.value) {
+            errMsg = error.response.data.error.message.value;
+        } else if (error.response?.data) {
+            errMsg = typeof error.response.data === 'object' ? JSON.stringify(error.response.data) : error.response.data;
+        }
+        const err = new Error(errMsg);
+        err.statusCode = error.statusCode || (error.response ? error.response.status : 500);
+        throw err;
+    }
+};
+
 module.exports = {
     fetchData,
     postData,
@@ -956,6 +1184,11 @@ module.exports = {
     productionOrderConfirmationCancel,
     postPrdOrderConfirmation,
     getProductionOrderDetails,
-    getMaterialList
+    getMaterialList,
+    fetchProductionOrderCsrfToken,
+    productionOrderCreateRelease,
+    productionOrderQtyChange
 };
+
+
 
