@@ -1166,6 +1166,284 @@ const productionOrderQtyChange = async (params = {}) => {
     }
 };
 
+/**
+ * Service to Technically Complete (TECO) a Production Order.
+ * Flow:
+ * 1. Fetch CSRF token and session cookies from API_PRODUCTION_ORDER_2_SRV
+ * 2. GET A_ProductionOrder_2('{ManufacturingOrder}')?sap-client=110 to retrieve ETag and CSRF token
+ * 3. POST to TechlyCmpltOrder?ManufacturingOrder='{ManufacturingOrder}'&sap-client=110 with ETag & CSRF token
+ * 4. Return result
+ */
+const productionOrderTeco = async (params = {}) => {
+    try {
+        const dynamicOrder = 
+            params.ManufacturingOrder || 
+            params.manufacturingOrder || 
+            params.orderNumber || 
+            params.OrderNumber || 
+            params.orderNo || 
+            params.OrderNo || 
+            params.orderId || 
+            params.OrderId || 
+            params.order || 
+            params.Order || 
+            params.aufnr || 
+            params.AUFNR || 
+            '001210000181';
+
+        const manufacturingOrder = String(dynamicOrder).trim();
+
+        // Credentials: default to FIOET_SAP / Password@123456789 (normalizes FIOET -> FIOET_SAP)
+        const baseAuth = getSapAuth();
+        const rawUsername = params.username || params.user || baseAuth.username || 'FIOET_SAP';
+        const auth = {
+            username: rawUsername === 'FIOET' ? 'FIOET_SAP' : rawUsername,
+            password: params.password || params.pass || baseAuth.password || 'Password@123456789'
+        };
+
+        const baseUrl = params.baseUrl || getSapBaseUrl();
+
+        // Step 1: Fetch initial CSRF token and session cookies
+        let csrfToken = null;
+        let currentCookies = [];
+
+        try {
+            const tokenUrl = `${baseUrl}/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV?sap-client=110`;
+            const tokenResponse = await axios.get(tokenUrl, {
+                auth,
+                headers: {
+                    'X-CSRF-Token': 'Fetch',
+                    'Accept': 'application/json'
+                }
+            });
+            csrfToken = tokenResponse.headers['x-csrf-token'];
+            if (tokenResponse.headers['set-cookie']) {
+                currentCookies = tokenResponse.headers['set-cookie'];
+            }
+        } catch (tokenErr) {
+            console.warn('Initial token fetch warning:', tokenErr.message);
+        }
+
+        // Step 2: GET order to retrieve ETag, CSRF token, and current cookies
+        const getOrderUrl = `${baseUrl}/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/A_ProductionOrder_2('${manufacturingOrder}')?sap-client=110`;
+        const getHeaders = {
+            'X-CSRF-Token': 'Fetch',
+            'Accept': 'application/json'
+        };
+        if (currentCookies.length > 0) {
+            getHeaders['Cookie'] = Array.isArray(currentCookies) ? currentCookies.join('; ') : currentCookies;
+        }
+
+        const getOrderResponse = await axios.get(getOrderUrl, {
+            auth,
+            headers: getHeaders
+        });
+
+        const etag = getOrderResponse.headers['etag'] || getOrderResponse.data?.d?.__metadata?.etag;
+        const postToken = getOrderResponse.headers['x-csrf-token'] || csrfToken;
+        if (getOrderResponse.headers['set-cookie']) {
+            currentCookies = getOrderResponse.headers['set-cookie'];
+        }
+
+        const orderDetails = getOrderResponse.data?.d || getOrderResponse.data;
+
+        // Step 3: POST to TechlyCmpltOrder FunctionImport
+        const tecoUrl = `${baseUrl}/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/TechlyCmpltOrder?ManufacturingOrder='${manufacturingOrder}'&sap-client=110`;
+        const tecoHeaders = {
+            'X-CSRF-Token': postToken,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        };
+        if (currentCookies.length > 0) {
+            tecoHeaders['Cookie'] = Array.isArray(currentCookies) ? currentCookies.join('; ') : currentCookies;
+        }
+        if (etag) {
+            tecoHeaders['If-Match'] = etag;
+        }
+
+        const tecoResponse = await axios.post(tecoUrl, {}, {
+            auth,
+            headers: tecoHeaders
+        });
+
+        const tecoData = tecoResponse.data?.d || tecoResponse.data;
+
+        return {
+            ManufacturingOrder: manufacturingOrder,
+            ETag: etag,
+            CSRFToken: postToken,
+            StatusCode: tecoResponse.status,
+            Status: 'Success',
+            OrderDetails: orderDetails,
+            Data: tecoData
+        };
+    } catch (error) {
+        console.error('Production Order TECO failed:', error.response ? error.response.data : error.message);
+        let errMsg = error.message;
+        if (error.response?.data?.error?.message?.value) {
+            errMsg = error.response.data.error.message.value;
+        } else if (error.response?.data) {
+            errMsg = typeof error.response.data === 'object' ? JSON.stringify(error.response.data) : error.response.data;
+        }
+        const err = new Error(errMsg);
+        err.statusCode = error.statusCode || (error.response ? error.response.status : 500);
+        throw err;
+    }
+};
+
+/**
+ * GET CSRF token and service metadata for UD Reversal service (ZPP_INSP_CANCEL_SRV_SRV).
+ * GET http://vhwclds4ap01.sap.wco.com:8000/sap/opu/odata/sap/ZPP_INSP_CANCEL_SRV_SRV/?sap-client=110
+ */
+const getUdReversalToken = async (params = {}) => {
+    try {
+        const baseAuth = getSapAuth();
+        const rawUsername = params.username || params.user || baseAuth.username || 'FIOET_SAP';
+        const auth = {
+            username: rawUsername === 'FIOET' ? 'FIOET_SAP' : rawUsername,
+            password: params.password || params.pass || baseAuth.password || 'Password@123456789'
+        };
+
+        const baseUrl = params.baseUrl || getSapBaseUrl();
+        const url = `${baseUrl}/sap/opu/odata/sap/ZPP_INSP_CANCEL_SRV_SRV/?sap-client=110`;
+        const response = await axios.get(url, {
+            auth,
+            headers: {
+                'X-CSRF-Token': 'Fetch',
+                'Accept': 'application/json'
+            }
+        });
+
+        const token = response.headers['x-csrf-token'];
+        const cookies = response.headers['set-cookie'];
+        return {
+            CSRFToken: token,
+            Cookies: cookies,
+            StatusCode: response.status,
+            ServiceMetadata: response.data
+        };
+    } catch (error) {
+        console.error('Failed to get UD Reversal CSRF token:', error.response ? error.response.data : error.message);
+        let errMsg = error.message;
+        if (error.response?.data?.error?.message?.value) {
+            errMsg = error.response.data.error.message.value;
+        } else if (error.response?.data) {
+            errMsg = typeof error.response.data === 'object' ? JSON.stringify(error.response.data) : error.response.data;
+        }
+        const err = new Error(errMsg);
+        err.statusCode = error.statusCode || (error.response ? error.response.status : 500);
+        throw err;
+    }
+};
+
+const fetchUdReversalCsrfToken = async (baseUrl, auth) => {
+    const res = await getUdReversalToken({ baseUrl, username: auth.username, password: auth.password });
+    return { token: res.CSRFToken, cookies: res.Cookies };
+};
+
+/**
+ * Service to process Usage Decision (UD) Reversal via ZPP_INSP_CANCEL_SRV_SRV.
+ * Flow:
+ * 1. GET CSRF token and cookies from /sap/opu/odata/sap/ZPP_INSP_CANCEL_SRV_SRV/?sap-client=110
+ * 2. POST to /sap/opu/odata/sap/ZPP_INSP_CANCEL_SRV_SRV/zinspection_lotSet?sap-client=110 with payload & CSRF token
+ * 3. Return created entity data
+ */
+const postUdReversal = async (params = {}, customHeaders = {}) => {
+    try {
+        const baseAuth = getSapAuth();
+        const rawUsername = params.username || params.user || baseAuth.username || 'FIOET_SAP';
+        const auth = {
+            username: rawUsername === 'FIOET' ? 'FIOET_SAP' : rawUsername,
+            password: params.password || params.pass || baseAuth.password || 'Password@123456789'
+        };
+
+        const baseUrl = params.baseUrl || getSapBaseUrl();
+
+        // Step 1: Use passed CSRF token or fetch a fresh one
+        let csrfToken = customHeaders['x-csrf-token'] || customHeaders['X-CSRF-Token'] || params.csrfToken || params.token;
+        let cookies = customHeaders['cookie'] || customHeaders['Cookie'] || params.cookies;
+
+        if (!csrfToken) {
+            const tokenRes = await getUdReversalToken({ baseUrl, username: auth.username, password: auth.password });
+            csrfToken = tokenRes.CSRFToken;
+            if (!cookies) {
+                cookies = tokenRes.Cookies;
+            }
+        }
+
+        if (!csrfToken) {
+            throw new Error('No CSRF token returned from SAP for UD Reversal API');
+        }
+
+        // Normalize fields
+        const dynamicLot = 
+            params.PRUEFLOS || 
+            params.prueflos || 
+            params.inspectionLot || 
+            params.InspectionLot || 
+            params.lotNumber || 
+            params.LotNumber || 
+            params.lot || 
+            '040000002247';
+
+        const dynamicDate = 
+            params.BUDAT || 
+            params.budat || 
+            params.postingDate || 
+            params.PostingDate || 
+            params.date || 
+            '20261017';
+
+        const payload = {
+            PRUEFLOS: String(dynamicLot).trim(),
+            BUDAT: String(dynamicDate).trim(),
+            STATUS: params.STATUS !== undefined ? params.STATUS : '',
+            MESSAGE: params.MESSAGE !== undefined ? params.MESSAGE : ''
+        };
+
+        // Step 2: Post to zinspection_lotSet
+        const postUrl = `${baseUrl}/sap/opu/odata/sap/ZPP_INSP_CANCEL_SRV_SRV/zinspection_lotSet?sap-client=110`;
+        const postHeaders = {
+            'X-CSRF-Token': csrfToken,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        };
+        if (cookies && (Array.isArray(cookies) ? cookies.length > 0 : String(cookies).trim().length > 0)) {
+            postHeaders['Cookie'] = Array.isArray(cookies) ? cookies.join('; ') : cookies;
+        }
+
+        const response = await axios.post(postUrl, payload, {
+            auth,
+            headers: postHeaders
+        });
+
+        const data = response.data?.d || response.data;
+
+        return {
+            PRUEFLOS: payload.PRUEFLOS,
+            BUDAT: payload.BUDAT,
+            CSRFToken: csrfToken,
+            StatusCode: response.status,
+            Status: data?.STATUS || 'Success',
+            Message: data?.MESSAGE || 'UD reversal executed successfully',
+            Data: data
+        };
+    } catch (error) {
+        console.error('UD Reversal request failed:', error.response ? error.response.data : error.message);
+        let errMsg = error.message;
+        if (error.response?.data?.error?.message?.value) {
+            errMsg = error.response.data.error.message.value;
+        } else if (error.response?.data) {
+            errMsg = typeof error.response.data === 'object' ? JSON.stringify(error.response.data) : error.response.data;
+        }
+        const err = new Error(errMsg);
+        err.statusCode = error.statusCode || (error.response ? error.response.status : 500);
+        throw err;
+    }
+};
+
+const udReversal = postUdReversal;
+
 module.exports = {
     fetchData,
     postData,
@@ -1187,8 +1465,16 @@ module.exports = {
     getMaterialList,
     fetchProductionOrderCsrfToken,
     productionOrderCreateRelease,
-    productionOrderQtyChange
+    productionOrderQtyChange,
+    productionOrderTeco,
+    fetchUdReversalCsrfToken,
+    getUdReversalToken,
+    postUdReversal,
+    udReversal
 };
+
+
+
 
 
 

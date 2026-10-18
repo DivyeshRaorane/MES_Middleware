@@ -700,6 +700,155 @@ const productionOrderQtyChange = async (req, res) => {
     }
 };
 
+/**
+ * Controller to handle Production Order TECO (Technical Completion).
+ */
+const productionOrderTeco = async (req, res) => {
+    try {
+        const payload = {
+            ...(req.query || {}),
+            ...(req.params || {}),
+            ...(req.body || {})
+        };
+
+        // Extract order number dynamically from any common field name
+        const dynamicOrder = 
+            payload.ManufacturingOrder || 
+            payload.manufacturingOrder || 
+            payload.orderNumber || 
+            payload.OrderNumber || 
+            payload.orderNo || 
+            payload.OrderNo || 
+            payload.orderId || 
+            payload.OrderId || 
+            payload.order || 
+            payload.Order || 
+            payload.aufnr || 
+            payload.AUFNR;
+
+        if (dynamicOrder) {
+            payload.ManufacturingOrder = String(dynamicOrder).trim();
+        }
+
+        const data = await sapODataService.productionOrderTeco(payload);
+
+        res.status(200).json({
+            Message: 'Production Order technically completed (TECO) successfully',
+            StatusCode: 200,
+            Data: data
+        });
+    } catch (error) {
+        console.error('Error in productionOrderTeco controller:', error.message);
+        const statusCode = error.statusCode || 500;
+        res.status(statusCode).json({
+            Message: error.message || 'Failed to technically complete Production Order (TECO)',
+            StatusCode: statusCode,
+            Data: []
+        });
+    }
+};
+
+/**
+ * Controller to handle GET requests for UD Reversal (fetches CSRF token and service metadata).
+ * GET http://localhost:3000/ud-reversal
+ */
+const getUdReversal = async (req, res) => {
+    try {
+        const params = {
+            ...(req.query || {}),
+            ...(req.params || {})
+        };
+
+        // If specific lot is requested in query or params, execute the reversal
+        if (params.PRUEFLOS || params.prueflos || params.lotNumber || params.lot || params.execute === 'true') {
+            const dynamicLot = params.PRUEFLOS || params.prueflos || params.lotNumber || params.lot;
+            if (dynamicLot) params.PRUEFLOS = String(dynamicLot).trim();
+            const data = await sapODataService.postUdReversal(params, req.headers);
+            return res.status(200).json({
+                Message: 'Usage Decision (UD) reversal executed successfully',
+                StatusCode: 200,
+                Data: data
+            });
+        }
+
+        // Standard GET: fetch CSRF token and metadata from SAP
+        const data = await sapODataService.getUdReversalToken(params);
+
+        res.status(200).json({
+            Message: 'UD Reversal CSRF token and service metadata retrieved successfully',
+            StatusCode: 200,
+            CSRFToken: data.CSRFToken,
+            Cookies: data.Cookies,
+            Data: data.ServiceMetadata
+        });
+    } catch (error) {
+        console.error('Error in getUdReversal controller:', error.message);
+        const statusCode = error.statusCode || 500;
+        res.status(statusCode).json({
+            Message: error.message || 'Failed to fetch UD Reversal CSRF token from SAP',
+            StatusCode: statusCode,
+            Data: []
+        });
+    }
+};
+
+/**
+ * Controller to handle POST requests for UD Reversal (posts payload with CSRF token).
+ * POST http://localhost:3000/ud-reversal
+ */
+const postUdReversal = async (req, res) => {
+    try {
+        const payload = {
+            ...(req.query || {}),
+            ...(req.params || {}),
+            ...(req.body || {})
+        };
+
+        // Extract lot number dynamically from any common field name
+        const dynamicLot = 
+            payload.PRUEFLOS || 
+            payload.prueflos || 
+            payload.inspectionLot || 
+            payload.InspectionLot || 
+            payload.lotNumber || 
+            payload.LotNumber || 
+            payload.lot;
+
+        if (dynamicLot) {
+            payload.PRUEFLOS = String(dynamicLot).trim();
+        }
+
+        const dynamicDate = 
+            payload.BUDAT || 
+            payload.budat || 
+            payload.postingDate || 
+            payload.PostingDate || 
+            payload.date;
+
+        if (dynamicDate) {
+            payload.BUDAT = String(dynamicDate).trim();
+        }
+
+        const data = await sapODataService.postUdReversal(payload, req.headers);
+
+        res.status(200).json({
+            Message: 'Usage Decision (UD) reversal request processed successfully',
+            StatusCode: 200,
+            Data: data
+        });
+    } catch (error) {
+        console.error('Error in postUdReversal controller:', error.message);
+        const statusCode = error.statusCode || 500;
+        res.status(statusCode).json({
+            Message: error.message || 'Failed to process Usage Decision (UD) reversal',
+            StatusCode: statusCode,
+            Data: []
+        });
+    }
+};
+
+const udReversal = postUdReversal;
+
 
 module.exports = {
     getSAPData,
@@ -725,8 +874,15 @@ module.exports = {
     getProductionOrderDetails,
     getMaterialList,
     productionOrderCreateRelease,
-    productionOrderQtyChange
+    productionOrderQtyChange,
+    productionOrderTeco,
+    getUdReversal,
+    postUdReversal,
+    udReversal
 };
+
+
+
 
 
 

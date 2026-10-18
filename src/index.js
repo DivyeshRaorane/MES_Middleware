@@ -27,6 +27,21 @@ app.post('/production-order-qty-change', sapController.productionOrderQtyChange)
 app.patch('/production-order-qty-change/:orderNumber', sapController.productionOrderQtyChange);
 app.post('/production-order-qty-change/:orderNumber', sapController.productionOrderQtyChange);
 
+// Direct routes for production-order-teco
+app.post('/production-order-teco', sapController.productionOrderTeco);
+app.get('/production-order-teco', sapController.productionOrderTeco);
+app.post('/production-order-teco/:orderNumber', sapController.productionOrderTeco);
+app.get('/production-order-teco/:orderNumber', sapController.productionOrderTeco);
+
+// Direct routes for ud-reversal
+app.get('/ud-reversal', sapController.getUdReversal);
+app.get('/ud-reversal/:lotNumber', sapController.getUdReversal);
+app.post('/ud-reversal', sapController.postUdReversal);
+app.post('/ud-reversal/:lotNumber', sapController.postUdReversal);
+
+
+
+
 
 // Basic health check route
 app.get('/health', (req, res) => {

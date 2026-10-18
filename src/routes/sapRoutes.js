@@ -90,7 +90,21 @@ router.post('/production-order-qty-change', sapController.productionOrderQtyChan
 router.patch('/production-order-qty-change/:orderNumber', sapController.productionOrderQtyChange);
 router.post('/production-order-qty-change/:orderNumber', sapController.productionOrderQtyChange);
 
+// POST & GET routes for Production Order TECO (Technical Completion)
+router.post('/production-order-teco', sapController.productionOrderTeco);
+router.get('/production-order-teco', sapController.productionOrderTeco);
+router.post('/production-order-teco/:orderNumber', sapController.productionOrderTeco);
+router.get('/production-order-teco/:orderNumber', sapController.productionOrderTeco);
+
+// POST & GET routes for Usage Decision (UD) Reversal
+router.get('/ud-reversal', sapController.getUdReversal);
+router.get('/ud-reversal/:lotNumber', sapController.getUdReversal);
+router.post('/ud-reversal', sapController.postUdReversal);
+router.post('/ud-reversal/:lotNumber', sapController.postUdReversal);
+
 module.exports = router;
+
+
 
 
 
