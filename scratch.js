@@ -2,7 +2,7 @@ const axios = require('axios');
 const url = 'http://vhwclds4ap01.sap.wco.com:8000/sap/opu/odata/sap/API_INSPECTIONLOT_SRV/$metadata';
 
 axios.get(url, {
-  auth: { username: 'FIOET_SAP', password: 'Password@987654321' }
+  auth: { username: 'HYD_MES', password: 'Welcome@1234567' }
 }).then(r => {
   const data = r.data;
   

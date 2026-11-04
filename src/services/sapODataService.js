@@ -1193,12 +1193,12 @@ const productionOrderTeco = async (params = {}) => {
 
         const manufacturingOrder = String(dynamicOrder).trim();
 
-        // Credentials: default to FIOET_SAP / Password@123456789 (normalizes FIOET -> FIOET_SAP)
+        // Credentials: default to HYD_MES / Welcome@1234567 (normalizes FIOET -> HYD_MES)
         const baseAuth = getSapAuth();
-        const rawUsername = params.username || params.user || baseAuth.username || 'FIOET_SAP';
+        const rawUsername = params.username || params.user || baseAuth.username || 'HYD_MES';
         const auth = {
-            username: rawUsername === 'FIOET' ? 'FIOET_SAP' : rawUsername,
-            password: params.password || params.pass || baseAuth.password || 'Password@123456789'
+            username: rawUsername === 'FIOET' ? 'HYD_MES' : rawUsername,
+            password: params.password || params.pass || baseAuth.password || 'Welcome@1234567'
         };
 
         const baseUrl = params.baseUrl || getSapBaseUrl();
@@ -1298,10 +1298,10 @@ const productionOrderTeco = async (params = {}) => {
 const getUdReversalToken = async (params = {}) => {
     try {
         const baseAuth = getSapAuth();
-        const rawUsername = params.username || params.user || baseAuth.username || 'FIOET_SAP';
+        const rawUsername = params.username || params.user || baseAuth.username || 'HYD_MES';
         const auth = {
-            username: rawUsername === 'FIOET' ? 'FIOET_SAP' : rawUsername,
-            password: params.password || params.pass || baseAuth.password || 'Password@123456789'
+            username: rawUsername === 'FIOET' ? 'HYD_MES' : rawUsername,
+            password: params.password || params.pass || baseAuth.password || 'Welcome@1234567'
         };
 
         const baseUrl = params.baseUrl || getSapBaseUrl();
@@ -1351,10 +1351,10 @@ const fetchUdReversalCsrfToken = async (baseUrl, auth) => {
 const postUdReversal = async (params = {}, customHeaders = {}) => {
     try {
         const baseAuth = getSapAuth();
-        const rawUsername = params.username || params.user || baseAuth.username || 'FIOET_SAP';
+        const rawUsername = params.username || params.user || baseAuth.username || 'HYD_MES';
         const auth = {
-            username: rawUsername === 'FIOET' ? 'FIOET_SAP' : rawUsername,
-            password: params.password || params.pass || baseAuth.password || 'Password@123456789'
+            username: rawUsername === 'FIOET' ? 'HYD_MES' : rawUsername,
+            password: params.password || params.pass || baseAuth.password || 'Welcome@1234567'
         };
 
         const baseUrl = params.baseUrl || getSapBaseUrl();
