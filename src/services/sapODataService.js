@@ -1193,12 +1193,12 @@ const productionOrderTeco = async (params = {}) => {
 
         const manufacturingOrder = String(dynamicOrder).trim();
 
-        // Credentials: default to HYD_MES / Welcome@1234567 (normalizes FIOET -> HYD_MES)
+        // Credentials: default to HYD_MES / Westcoast@2026 (normalizes FIOET -> HYD_MES)
         const baseAuth = getSapAuth();
         const rawUsername = params.username || params.user || baseAuth.username || 'HYD_MES';
         const auth = {
             username: rawUsername === 'FIOET' ? 'HYD_MES' : rawUsername,
-            password: params.password || params.pass || baseAuth.password || 'Welcome@1234567'
+            password: params.password || params.pass || baseAuth.password || 'Westcoast@2026'
         };
 
         const baseUrl = params.baseUrl || getSapBaseUrl();
@@ -1301,7 +1301,7 @@ const getUdReversalToken = async (params = {}) => {
         const rawUsername = params.username || params.user || baseAuth.username || 'HYD_MES';
         const auth = {
             username: rawUsername === 'FIOET' ? 'HYD_MES' : rawUsername,
-            password: params.password || params.pass || baseAuth.password || 'Welcome@1234567'
+            password: params.password || params.pass || baseAuth.password || 'Westcoast@2026'
         };
 
         const baseUrl = params.baseUrl || getSapBaseUrl();
@@ -1354,7 +1354,7 @@ const postUdReversal = async (params = {}, customHeaders = {}) => {
         const rawUsername = params.username || params.user || baseAuth.username || 'HYD_MES';
         const auth = {
             username: rawUsername === 'FIOET' ? 'HYD_MES' : rawUsername,
-            password: params.password || params.pass || baseAuth.password || 'Welcome@1234567'
+            password: params.password || params.pass || baseAuth.password || 'Westcoast@2026'
         };
 
         const baseUrl = params.baseUrl || getSapBaseUrl();
